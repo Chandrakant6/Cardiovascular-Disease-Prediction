@@ -9,6 +9,12 @@ from sklearn.metrics import accuracy_score
 import os
 import seaborn as sns
 import matplotlib.pyplot as plt
+import joblib
+
+# Create models directory if it doesn't exist
+models_dir = 'saved_models'
+if not os.path.exists(models_dir):
+    os.makedirs(models_dir)
 
 # Load and preprocess data
 def load_and_preprocess_data(file_path, sample_size=10000):
@@ -16,7 +22,7 @@ def load_and_preprocess_data(file_path, sample_size=10000):
     df = pd.read_csv(file_path, sep=';')
     
     # Sample data
-    df = df.sample(n=sample_size, random_state=42)
+    df = df.sample(n=sample_size, random_state=42)  # set seed 42
     
     # Basic preprocessing
     df['age'] = (df['age'] / 365).astype(int)
@@ -79,6 +85,10 @@ def train_and_evaluate_models(X_train, X_test, y_train, y_test):
     
     # Train and evaluate
     results = {}
+    best_model = None
+    best_accuracy = 0
+    best_model_name = ""
+    
     for name, model in models.items():
         print(f"Training {name}...")
         model.fit(X_train, y_train)
@@ -86,8 +96,50 @@ def train_and_evaluate_models(X_train, X_test, y_train, y_test):
         acc = accuracy_score(y_test, y_pred)
         results[name] = acc
         print(f"{name} accuracy: {acc:.4f}")
+        
+        # Save the model
+        model_path = os.path.join(models_dir, f"{name.replace(' ', '_').lower()}.joblib")
+        joblib.dump(model, model_path)
+        print(f"Model saved to {model_path}")
+        
+        # Track best model
+        if acc > best_accuracy:
+            best_accuracy = acc
+            best_model = model
+            best_model_name = name
+    
+    # Save best model info
+    best_model_info = {
+        'model_name': best_model_name,
+        'accuracy': best_accuracy
+    }
+    joblib.dump(best_model_info, os.path.join(models_dir, 'best_model_info.joblib'))
+    print(f"\nBest performing model: {best_model_name} with accuracy: {best_accuracy:.4f}")
     
     return results
+
+# Function to load and use the best model
+def load_best_model():
+    # Load best model info
+    best_model_info = joblib.load(os.path.join(models_dir, 'best_model_info.joblib'))
+    best_model_name = best_model_info['model_name']
+    
+    # Load the best model
+    model_path = os.path.join(models_dir, f"{best_model_name.replace(' ', '_').lower()}.joblib")
+    model = joblib.load(model_path)
+    
+    # Load the scaler
+    scaler = joblib.load(os.path.join(models_dir, 'scaler.joblib'))
+    
+    return model, scaler, best_model_name
+
+# Example function to make predictions
+def predict_cardiovascular_disease(model, scaler, data):
+    # Scale the data
+    scaled_data = scaler.transform(data)
+    # Make prediction
+    prediction = model.predict(scaled_data)
+    return prediction
 
 # Plot model accuracies
 def plot_model_accuracies(results):
@@ -120,6 +172,11 @@ def main():
     X_train_scaled = scaler.fit_transform(X_train)
     X_test_scaled = scaler.transform(X_test)
     
+    # Save the scaler
+    scaler_path = os.path.join(models_dir, 'scaler.joblib')
+    joblib.dump(scaler, scaler_path)
+    print(f"Scaler saved to {scaler_path}")
+    
     # Train and evaluate models
     results = train_and_evaluate_models(X_train_scaled, X_test_scaled, y_train, y_test)
     
@@ -130,6 +187,11 @@ def main():
     
     # Plot results
     plot_model_accuracies(results)
+    
+    # Example of loading and using the best model
+    print("\nLoading best model for predictions...")
+    best_model, scaler, best_model_name = load_best_model()
+    print(f"Loaded {best_model_name} for predictions")
 
 if __name__ == "__main__":
     main()
